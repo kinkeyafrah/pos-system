@@ -1,0 +1,7 @@
+{
+  "name": "FreshFlow POS",
+  "description": "A comprehensive, high-speed grocery POS system featuring real-time inventory tracking, analytics dashboard, and AI-powered product assistance.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
