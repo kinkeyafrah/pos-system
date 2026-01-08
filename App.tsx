@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutGrid, 
@@ -7,25 +6,12 @@ import {
   BarChart3, 
   Users as UsersIcon, 
   Settings as SettingsIcon,
-  Search,
-  Plus,
-  Minus,
-  Trash2,
-  Pause,
-  Play,
-  CreditCard,
-  Banknote,
-  Smartphone,
-  CheckCircle2,
-  AlertCircle,
   Menu,
-  X,
   Sun,
-  Moon,
-  ArrowRightLeft
+  Moon
 } from 'lucide-react';
 import { ViewType, Product, CartItem, Transaction, UnitOfMeasure, AppConfig } from './types';
-import { INITIAL_PRODUCTS, CATEGORIES } from './constants';
+import { INITIAL_PRODUCTS } from './constants';
 import POSView from './components/POSView';
 import InventoryView from './components/InventoryView';
 import DashboardView from './components/DashboardView';
@@ -42,7 +28,7 @@ const DEFAULT_CONFIG: AppConfig = {
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewType>('pos');
-  const [inventory, setInventory] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [inventory, setInventory] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [heldCarts, setHeldCarts] = useState<CartItem[][]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -50,59 +36,49 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<Transaction | null>(null);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
+  const [loading, setLoading] = useState(true);
 
-  // Persistence
+  // Initialize from LocalStorage
   useEffect(() => {
-    // Load Inventory
     const savedInventory = localStorage.getItem('freshflow_inventory');
-    if (savedInventory) {
-      try {
-        const parsed = JSON.parse(savedInventory);
-        const migrated = parsed.map((p: any) => ({ ...p, uom: p.uom === 'lb' ? UnitOfMeasure.KG : p.uom }));
-        setInventory(migrated);
-      } catch (e) { setInventory(INITIAL_PRODUCTS); }
-    }
-    
-    // Load Transactions
     const savedTransactions = localStorage.getItem('freshflow_transactions');
-    if (savedTransactions) {
-      try { setTransactions(JSON.parse(savedTransactions)); } 
-      catch (e) { setTransactions([]); }
-    }
-
-    // Load Config
     const savedConfig = localStorage.getItem('freshflow_config');
-    if (savedConfig) {
-      try { 
-        // Merge saved config with defaults to ensure new fields are added
-        const parsedConfig = JSON.parse(savedConfig);
-        setConfig({ ...DEFAULT_CONFIG, ...parsedConfig });
-      }
-      catch(e) { setConfig(DEFAULT_CONFIG); }
+    const savedDarkMode = localStorage.getItem('freshflow_darkmode');
+
+    if (savedInventory) setInventory(JSON.parse(savedInventory));
+    else setInventory(INITIAL_PRODUCTS);
+
+    if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
+    if (savedConfig) setConfig(JSON.parse(savedConfig));
+    if (savedDarkMode) setIsDarkMode(JSON.parse(savedDarkMode));
+
+    setLoading(false);
+  }, []);
+
+  // Persist to LocalStorage
+  useEffect(() => {
+    if (!loading) {
+      localStorage.setItem('freshflow_inventory', JSON.stringify(inventory));
     }
-  }, []);
+  }, [inventory, loading]);
 
   useEffect(() => {
-    localStorage.setItem('freshflow_inventory', JSON.stringify(inventory));
-  }, [inventory]);
+    if (!loading) {
+      localStorage.setItem('freshflow_transactions', JSON.stringify(transactions));
+    }
+  }, [transactions, loading]);
 
   useEffect(() => {
-    localStorage.setItem('freshflow_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+    if (!loading) {
+      localStorage.setItem('freshflow_config', JSON.stringify(config));
+    }
+  }, [config, loading]);
 
   useEffect(() => {
-    localStorage.setItem('freshflow_config', JSON.stringify(config));
-  }, [config]);
-
-  useEffect(() => {
-    (window as any).clearTheCart = () => setCart([]);
-    return () => { delete (window as any).clearTheCart; };
-  }, []);
-
-  const handleViewChange = (view: ViewType) => {
-    setActiveView(view);
-    if (window.innerWidth < 1024) setIsSidebarOpen(false);
-  };
+    if (!loading) {
+      localStorage.setItem('freshflow_darkmode', JSON.stringify(isDarkMode));
+    }
+  }, [isDarkMode, loading]);
 
   const addToCart = (product: Product, weight?: number) => {
     setCart(prev => {
@@ -149,33 +125,35 @@ const App: React.FC = () => {
 
   const completeSale = (paymentMethod: Transaction['paymentMethod']) => {
     if (cart.length === 0) return;
+    
     const subtotal = cart.reduce((acc, item) => {
       const price = item.product.uom === UnitOfMeasure.KG ? item.product.price * (item.weight || 1) : item.product.price * item.quantity;
       return acc + price;
     }, 0);
-    const tax = subtotal * config.taxRate;
+    const taxValue = subtotal * config.taxRate;
     
+    const transactionId = `TXN-${Date.now()}`;
     const newTransaction: Transaction = {
-      id: `TXN-${Date.now()}`,
+      id: transactionId,
       timestamp: new Date().toISOString(),
       items: [...cart],
-      total: subtotal + tax,
-      tax: tax,
+      total: subtotal + taxValue,
+      tax: taxValue,
       paymentMethod,
       cashierId: 'CASHIER-01'
     };
 
-    setTransactions(prev => [newTransaction, ...prev]);
-    
+    // Update inventory stock locally
     setInventory(prev => prev.map(p => {
-      const cartItem = cart.find(ci => ci.product.id === p.id);
+      const cartItem = cart.find(item => item.product.id === p.id);
       if (cartItem) {
         const reduction = cartItem.product.uom === UnitOfMeasure.KG ? (cartItem.weight || 0) : cartItem.quantity;
         return { ...p, stock: Math.max(0, p.stock - reduction) };
       }
       return p;
     }));
-    
+
+    setTransactions(prev => [newTransaction, ...prev]);
     setLastTransaction(newTransaction);
     setCart([]);
   };
@@ -184,6 +162,22 @@ const App: React.FC = () => {
     setCart([]);
     setLastTransaction(null);
   };
+
+  const handleViewChange = (view: ViewType) => {
+      setActiveView(view);
+      if (window.innerWidth < 1024) setIsSidebarOpen(false);
+  };
+
+  if (loading) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'}`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="font-bold text-emerald-600">Loading System...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen flex ${isDarkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
@@ -219,7 +213,7 @@ const App: React.FC = () => {
             <div className={`p-4 rounded-xl ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                <span className="text-xs font-semibold opacity-70 uppercase tracking-wider">Status: Online</span>
+                <span className="text-xs font-semibold opacity-70 uppercase tracking-wider">Status: Offline Mode</span>
               </div>
               <p className="text-sm font-medium">Terminal #104</p>
             </div>
