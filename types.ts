@@ -38,11 +38,15 @@ export interface Transaction {
   cashierId: string;
 }
 
-export interface User {
+export type UserRole = 'cashier' | 'manager' | 'admin';
+
+export interface UserAccount {
   id: string;
   name: string;
-  role: 'cashier' | 'manager' | 'admin';
-  pin: string;
+  username: string;
+  role: UserRole;
+  password: string;
+  createdAt: string;
 }
 
 export type ViewType = 'pos' | 'inventory' | 'dashboard' | 'users' | 'settings';
