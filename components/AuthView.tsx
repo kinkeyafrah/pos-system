@@ -92,6 +92,17 @@ const AuthView: React.FC<AuthViewProps> = ({ users, isDarkMode, onLogin, onSignu
               </div>
             )}
 
+            <div className={`mb-6 rounded-2xl border p-4 ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-emerald-50 border-emerald-100'}`}>
+              <p className="text-sm font-semibold text-slate-600 mb-3">Need a quick preview?</p>
+              <button
+                type="button"
+                onClick={onDemoLogin}
+                className="w-full rounded-xl border border-emerald-200 text-emerald-600 font-bold py-3 hover:bg-emerald-50 transition-colors"
+              >
+                View Demo Mode
+              </button>
+            </div>
+
             {isSignup ? (
               <form className="space-y-4" onSubmit={handleSignup}>
                 <div>
@@ -143,13 +154,6 @@ const AuthView: React.FC<AuthViewProps> = ({ users, isDarkMode, onLogin, onSignu
                   <UserPlus size={18} />
                   {isFirstUser ? 'Create Admin Account' : 'Create Account'}
                 </button>
-                <button
-                  type="button"
-                  onClick={onDemoLogin}
-                  className="w-full rounded-xl border border-emerald-200 text-emerald-600 font-bold py-3 hover:bg-emerald-50 transition-colors"
-                >
-                  View Demo Mode
-                </button>
               </form>
             ) : (
               <form className="space-y-4" onSubmit={handleLogin}>
@@ -176,13 +180,6 @@ const AuthView: React.FC<AuthViewProps> = ({ users, isDarkMode, onLogin, onSignu
                 </div>
                 <button type="submit" className="w-full rounded-xl bg-emerald-600 text-white font-bold py-3 hover:bg-emerald-500 transition-colors">
                   Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={onDemoLogin}
-                  className="w-full rounded-xl border border-emerald-200 text-emerald-600 font-bold py-3 hover:bg-emerald-50 transition-colors"
-                >
-                  View Demo Mode
                 </button>
               </form>
             )}
