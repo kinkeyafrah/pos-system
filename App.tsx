@@ -10,12 +10,14 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
-import { ViewType, Product, CartItem, Transaction, UnitOfMeasure, AppConfig } from './types';
+import { ViewType, Product, CartItem, Transaction, UnitOfMeasure, AppConfig, UserAccount, UserRole } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import POSView from './components/POSView';
 import InventoryView from './components/InventoryView';
 import DashboardView from './components/DashboardView';
 import SettingsView from './components/SettingsView';
+import AuthView from './components/AuthView';
+import UsersView from './components/UsersView';
 
 const DEFAULT_CONFIG: AppConfig = {
   storeName: 'FreshFlow',
@@ -36,6 +38,8 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [lastTransaction, setLastTransaction] = useState<Transaction | null>(null);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
+  const [users, setUsers] = useState<UserAccount[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Initialize from LocalStorage
@@ -44,6 +48,8 @@ const App: React.FC = () => {
     const savedTransactions = localStorage.getItem('freshflow_transactions');
     const savedConfig = localStorage.getItem('freshflow_config');
     const savedDarkMode = localStorage.getItem('freshflow_darkmode');
+    const savedUsers = localStorage.getItem('freshflow_users');
+    const savedCurrentUser = localStorage.getItem('freshflow_current_user');
 
     if (savedInventory) setInventory(JSON.parse(savedInventory));
     else setInventory(INITIAL_PRODUCTS);
@@ -51,6 +57,8 @@ const App: React.FC = () => {
     if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
     if (savedConfig) setConfig(JSON.parse(savedConfig));
     if (savedDarkMode) setIsDarkMode(JSON.parse(savedDarkMode));
+    if (savedUsers) setUsers(JSON.parse(savedUsers));
+    if (savedCurrentUser) setCurrentUser(JSON.parse(savedCurrentUser));
 
     setLoading(false);
   }, []);
@@ -79,6 +87,22 @@ const App: React.FC = () => {
       localStorage.setItem('freshflow_darkmode', JSON.stringify(isDarkMode));
     }
   }, [isDarkMode, loading]);
+
+  useEffect(() => {
+    if (!loading) {
+      localStorage.setItem('freshflow_users', JSON.stringify(users));
+    }
+  }, [users, loading]);
+
+  useEffect(() => {
+    if (!loading) {
+      if (currentUser) {
+        localStorage.setItem('freshflow_current_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('freshflow_current_user');
+      }
+    }
+  }, [currentUser, loading]);
 
   const addToCart = (product: Product, weight?: number) => {
     setCart(prev => {
@@ -140,7 +164,7 @@ const App: React.FC = () => {
       total: subtotal + taxValue,
       tax: taxValue,
       paymentMethod,
-      cashierId: 'CASHIER-01'
+      cashierId: currentUser ? currentUser.name : 'CASHIER-01'
     };
 
     // Update inventory stock locally
@@ -168,6 +192,76 @@ const App: React.FC = () => {
       if (window.innerWidth < 1024) setIsSidebarOpen(false);
   };
 
+  const handleLogin = (username: string, password: string) => {
+    const normalized = username.toLowerCase();
+    const match = users.find(user => user.username.toLowerCase() === normalized && user.password === password);
+    if (!match) {
+      return { success: false, message: 'Invalid username or password.' };
+    }
+    setCurrentUser(match);
+    return { success: true, message: `Welcome back, ${match.name}!` };
+  };
+
+  const handleSignup = (payload: { name: string; username: string; role: UserRole; password: string }) => {
+    if (!payload.name || !payload.username || !payload.password) {
+      return { success: false, message: 'Please complete all fields.' };
+    }
+    if (users.some(user => user.username.toLowerCase() === payload.username.toLowerCase())) {
+      return { success: false, message: 'That username is already in use.' };
+    }
+    const newUser: UserAccount = {
+      id: `user-${Date.now()}`,
+      name: payload.name,
+      username: payload.username,
+      role: users.length === 0 ? 'admin' : payload.role,
+      password: payload.password,
+      createdAt: new Date().toISOString(),
+    };
+    setUsers(prev => [...prev, newUser]);
+    return { success: true, message: 'Account created successfully.' };
+  };
+
+  const handleDemoLogin = () => {
+    const demoUser: UserAccount = {
+      id: 'demo-user',
+      name: 'Demo Manager',
+      username: 'demo',
+      role: 'manager',
+      password: 'demo',
+      createdAt: new Date().toISOString(),
+    };
+    setUsers(prev => (prev.some(user => user.id === demoUser.id) ? prev : [...prev, demoUser]));
+    setCurrentUser(demoUser);
+  };
+
+  const handleAddUser = (payload: { name: string; username: string; role: UserRole; password: string }) => {
+    if (users.some(user => user.username.toLowerCase() === payload.username.toLowerCase())) {
+      return { success: false, message: 'Username already exists.' };
+    }
+    const newUser: UserAccount = {
+      id: `user-${Date.now()}`,
+      name: payload.name,
+      username: payload.username,
+      role: payload.role,
+      password: payload.password,
+      createdAt: new Date().toISOString(),
+    };
+    setUsers(prev => [...prev, newUser]);
+    return { success: true, message: 'Staff account saved successfully.' };
+  };
+
+  const handleUpdateUser = (id: string, updates: Partial<Pick<UserAccount, 'name' | 'role' | 'password'>>) => {
+    setUsers(prev => prev.map(user => user.id === id ? { ...user, ...updates } : user));
+    if (currentUser?.id === id) {
+      setCurrentUser(prev => prev ? { ...prev, ...updates } : prev);
+    }
+  };
+
+  const handleDeleteUser = (id: string) => {
+    if (currentUser?.id === id) return;
+    setUsers(prev => prev.filter(user => user.id !== id));
+  };
+
   if (loading) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'}`}>
@@ -176,6 +270,18 @@ const App: React.FC = () => {
           <p className="font-bold text-emerald-600">Loading System...</p>
         </div>
       </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthView
+        users={users}
+        isDarkMode={isDarkMode}
+        onLogin={handleLogin}
+        onSignup={handleSignup}
+        onDemoLogin={handleDemoLogin}
+      />
     );
   }
 
@@ -206,6 +312,17 @@ const App: React.FC = () => {
           </nav>
 
           <div className="mt-auto space-y-4">
+            <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>
+              <p className="text-xs uppercase tracking-widest text-emerald-500 font-semibold">Signed in as</p>
+              <p className="text-sm font-bold mt-1">{currentUser.name}</p>
+              <p className="text-xs text-slate-400">{currentUser.role.toUpperCase()} • {currentUser.username}</p>
+              <button
+                onClick={() => setCurrentUser(null)}
+                className="mt-3 text-xs font-semibold text-rose-500 hover:text-rose-400"
+              >
+                Sign out
+              </button>
+            </div>
             <button onClick={() => setIsDarkMode(!isDarkMode)} className={`flex items-center gap-3 w-full p-3 rounded-xl transition-colors ${isDarkMode ? 'hover:bg-slate-700 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}>
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
               <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
@@ -232,7 +349,16 @@ const App: React.FC = () => {
           {activeView === 'pos' && <POSView inventory={inventory} cart={cart} addToCart={addToCart} removeFromCart={removeFromCart} updateQuantity={updateQuantity} holdTransaction={holdTransaction} heldCarts={heldCarts} resumeTransaction={resumeTransaction} deleteHeldTransaction={deleteHeldTransaction} completeSale={completeSale} isDarkMode={isDarkMode} lastTransaction={lastTransaction} startNewSale={startNewSale} config={config} />}
           {activeView === 'inventory' && <InventoryView inventory={inventory} setInventory={setInventory} isDarkMode={isDarkMode} />}
           {activeView === 'dashboard' && <DashboardView transactions={transactions} inventory={inventory} isDarkMode={isDarkMode} config={config} />}
-          {activeView === 'users' && <div className="flex items-center justify-center h-full text-slate-400">Staff management coming soon...</div>}
+          {activeView === 'users' && currentUser && (
+            <UsersView
+              users={users}
+              currentUser={currentUser}
+              isDarkMode={isDarkMode}
+              onAddUser={handleAddUser}
+              onUpdateUser={handleUpdateUser}
+              onDeleteUser={handleDeleteUser}
+            />
+          )}
           {activeView === 'settings' && <SettingsView config={config} setConfig={setConfig} isDarkMode={isDarkMode} />}
         </div>
       </main>
